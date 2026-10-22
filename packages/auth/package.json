@@ -1,0 +1,22 @@
+{
+  "name": "@mandate/auth",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@better-auth/expo": "catalog:",
+    "@mandate/db": "workspace:*",
+    "better-auth": "catalog:",
+    "mongodb": "^7.6.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@mandate/config": "workspace:*",
+    "typescript": "^6.0.3"
+  }
+}

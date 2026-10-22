@@ -1,0 +1,22 @@
+{
+  "name": "@mandate/api",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mandate/auth": "workspace:*",
+    "@mandate/db": "workspace:*",
+    "@trpc/client": "catalog:",
+    "@trpc/server": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@mandate/config": "workspace:*",
+    "typescript": "^6.0.3"
+  }
+}

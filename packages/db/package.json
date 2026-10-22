@@ -1,0 +1,20 @@
+{
+  "name": "@mandate/db",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "mongoose": "^9.9.5",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@mandate/config": "workspace:*",
+    "typescript": "^6.0.3",
+    "varlock": "catalog:"
+  }
+}

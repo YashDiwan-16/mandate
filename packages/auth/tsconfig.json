@@ -1,0 +1,6 @@
+{
+  "extends": "@mandate/config/tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true
+  }
+}
