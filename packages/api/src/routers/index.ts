@@ -1,9 +1,7 @@
 import { protectedProcedure, publicProcedure, router } from "../index";
 import { rulesRouter } from "./rules";
-import { catalogRouter } from "./catalog";
 
 export const appRouter = router({
-  catalog: catalogRouter,
   rules: rulesRouter,
   healthCheck: publicProcedure.query(() => {
     return "OK";
