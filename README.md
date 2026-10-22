@@ -79,6 +79,12 @@ Bun's automatic env loading is disabled in `bunfig.toml`; the framework integrat
 
 Run standalone Node/Bun tools that use Varlock from the owning app directory so they load that app's schema and env files. `env:generate` only generates TypeScript files; it does not initialize environment values in a subsequent command.
 
+The server also requires `INTENT_SIGNING_KEY` (at least 32 characters). Keep this key stable: confirmed policy signatures cannot be verified after changing it.
+
+## Policy Compiler
+
+The authenticated tRPC mutations `rules.preview` and `rules.confirm` accept policy text and an existing store ID. Preview returns validated rules; confirmation checks that preview again, creates a versioned policy, and signs an intent record. `rules.verifyIntent` checks the stored signature. The current MVP interpreter supports a constrained format such as “Groceries up to $80 a week. Ask me before anything over $30 from a new category. Never gift cards or subscriptions.” Unsupported wording is rejected for the shopper to revise. These endpoints do not authorize payments.
+
 ## Project Structure
 
 ```

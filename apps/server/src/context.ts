@@ -3,6 +3,10 @@ import type { Context as HonoContext } from "hono";
 
 import { db } from "./services";
 import { auth } from "./services";
+import { ENV } from "./env.server";
+import { createIntentSigner } from "./intent-signing";
+
+const intentSigner = createIntentSigner(ENV.INTENT_SIGNING_KEY);
 
 export type CreateContextOptions = {
   context: HonoContext;
@@ -15,6 +19,7 @@ export async function createContext({ context }: CreateContextOptions): Promise<
   return {
     db,
     session,
+    intentSigner,
   };
 }
 
