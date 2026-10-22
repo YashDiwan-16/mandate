@@ -8,3 +8,6 @@ export async function createDb(env: DatabaseConfig) {
 }
 
 export type Database = Awaited<ReturnType<typeof createDb>>;
+
+export { User } from "./models/auth.model";
+export * from "./models/mandate.model";
