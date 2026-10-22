@@ -103,6 +103,15 @@ New intents use a canonical version-2 JSON payload with `currency: "USD"` and a 
 
 Run compiler and signature tests with `pnpm --filter @mandate/api test` and `pnpm --filter server test`. For database-backed endpoint tests, start MongoDB and run `MANDATE_TEST_MONGODB_URI=mongodb://127.0.0.1:27017 pnpm --filter server test:integration`. The test suite creates and removes its own randomly named database.
 
+## Purchase Policy Checks
+
+The pure evaluator and the server-priced cart helper are documented in
+[Deterministic purchase policy checks](docs/purchase-policy.md). Amounts strictly
+over the threshold require approval even in familiar categories; new allowed
+categories independently require approval when enabled. Weekly caps include
+outstanding reservations and use Monday 00:00 UTC boundaries. These read-only
+checks do not reserve spending capacity or make PayPal calls.
+
 ## Project Structure
 
 ```
