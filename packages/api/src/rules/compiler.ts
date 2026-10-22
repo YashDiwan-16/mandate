@@ -52,7 +52,7 @@ function categoriesIn(text: string): string[] {
 /** Interpret the supported demo grammar; incomplete or unfamiliar clauses fail closed. */
 export function compilePolicyText(originalWords: string, allowedStoreId: string): CompiledRules {
   const clauses = originalWords
-    .split(/[.!?]+/)
+    .split(/\.(?!\d)|[!?]+/)
     .map((clause) => clause.trim())
     .filter(Boolean);
   const weekly = clauses.find((clause) => /\b(?:a|per) week\b/i.test(clause));

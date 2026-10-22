@@ -1,4 +1,4 @@
-import { Policy, SignedIntent, Store } from "@mandate/db";
+import { Policy, SignedIntent, Store, type PolicyRecord, type SignedIntentRecord } from "@mandate/db";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
@@ -20,6 +20,43 @@ function parsePolicy(originalWords: string, storeId: string) {
       code: "BAD_REQUEST",
       message: error instanceof Error ? error.message : "Invalid policy",
     });
+  }
+}
+
+function policyRules(policy: Pick<PolicyRecord, "rules">) {
+  return {
+    allowedCategories: policy.rules.allowedCategories,
+    blockedCategories: policy.rules.blockedCategories,
+    allowedStoreId: String(policy.rules.allowedStoreId),
+    weeklyCapCents: policy.rules.weeklyCapCents,
+    askAboveCents: policy.rules.askAboveCents,
+    askForNewCategory: policy.rules.askForNewCategory,
+  };
+}
+
+function validStoredIntent(
+  policy: (PolicyRecord & { _id: unknown }) | null,
+  intent: SignedIntentRecord,
+  signer: { keyId: string; verify(payload: string, signature: string): boolean },
+): boolean {
+  if (!policy || intent.keyId !== signer.keyId) return false;
+  try {
+    const payload = intentPayloadSchema.safeParse(JSON.parse(intent.payload));
+    return (
+      payload.success &&
+      payload.data.userId === String(policy.userId) &&
+      payload.data.userId === String(intent.userId) &&
+      payload.data.policyId === String(policy._id) &&
+      payload.data.policyId === String(intent.policyId) &&
+      payload.data.version === policy.version &&
+      payload.data.originalWords === policy.originalWords &&
+      payload.data.signedAt === policy.confirmedAt.toISOString() &&
+      payload.data.signedAt === intent.signedAt.toISOString() &&
+      JSON.stringify(payload.data.rules) === JSON.stringify(policyRules(policy)) &&
+      signer.verify(intent.payload, intent.signature)
+    );
+  } catch {
+    return false;
   }
 }
 
@@ -45,7 +82,41 @@ export const rulesRouter = router({
       }
 
       const userId = ctx.session.user.id;
-      const previous = await Policy.findOne({ userId }).sort({ version: -1 }).lean();
+      const previous = await Policy.findOne({ userId }).sort({ version: -1 });
+      if (
+        previous?.originalWords === input.originalWords &&
+        JSON.stringify(policyRules(previous)) === JSON.stringify(rules)
+      ) {
+        let intent = await SignedIntent.findOne({ policyId: previous._id });
+        if (!intent) {
+          const payload = serializeIntent({
+            userId,
+            policyId: previous.id,
+            version: previous.version,
+            originalWords: previous.originalWords,
+            rules,
+            signedAt: previous.confirmedAt.toISOString(),
+          });
+          intent = await SignedIntent.create({
+            userId,
+            policyId: previous._id,
+            payload,
+            keyId: ctx.intentSigner.keyId,
+            signature: ctx.intentSigner.sign(payload),
+            signedAt: previous.confirmedAt,
+          });
+        }
+        if (!validStoredIntent(previous, intent, ctx.intentSigner)) {
+          throw new TRPCError({ code: "CONFLICT", message: "Existing intent failed verification" });
+        }
+        return {
+          policyId: previous.id,
+          intentId: intent.id,
+          version: previous.version,
+          rules,
+          signature: intent.signature,
+        };
+      }
       const version = (previous?.version ?? 0) + 1;
       const signedAt = new Date();
       const policy = new Policy({ userId, version, originalWords: input.originalWords, rules, confirmedAt: signedAt });
@@ -66,37 +137,22 @@ export const rulesRouter = router({
         }
         throw error;
       }
-      let intent;
-      try {
-        intent = await SignedIntent.create({
-          userId,
-          policyId: policy._id,
-          payload,
-          keyId: ctx.intentSigner.keyId,
-          signature,
-          signedAt,
-        });
-      } catch (error) {
-        await policy.deleteOne();
-        throw error;
-      }
+      // Keep the policy if this write fails; a retry completes the same version.
+      const intent = await SignedIntent.create({
+        userId,
+        policyId: policy._id,
+        payload,
+        keyId: ctx.intentSigner.keyId,
+        signature,
+        signedAt,
+      });
       return { policyId: policy.id, intentId: intent.id, version, rules, signature };
     }),
 
   verifyIntent: protectedProcedure.input(z.object({ intentId: objectId })).query(async ({ ctx, input }) => {
     const intent = await SignedIntent.findOne({ _id: input.intentId, userId: ctx.session.user.id }).lean();
     if (!intent) throw new TRPCError({ code: "NOT_FOUND", message: "Intent not found" });
-    try {
-      const payload = intentPayloadSchema.safeParse(JSON.parse(intent.payload));
-      return {
-        valid:
-          payload.success &&
-          payload.data.userId === String(intent.userId) &&
-          payload.data.policyId === String(intent.policyId) &&
-          ctx.intentSigner.verify(intent.payload, intent.signature),
-      };
-    } catch {
-      return { valid: false };
-    }
+    const policy = await Policy.findById(intent.policyId).lean();
+    return { valid: validStoredIntent(policy, intent, ctx.intentSigner) };
   }),
 });

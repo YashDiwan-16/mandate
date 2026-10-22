@@ -17,6 +17,13 @@ test("compiles a complete plain-English policy", () => {
   });
 });
 
+test("keeps decimal amounts intact when splitting sentences", () => {
+  const decimal = text.replace("$80", "$80.50").replace("$30", "$30.25");
+  const rules = compilePolicyText(decimal, storeId);
+  assert.equal(rules.weeklyCapCents, 8050);
+  assert.equal(rules.askAboveCents, 3025);
+});
+
 test("rejects malformed structured output", () => {
   assert.throws(() => validateCompiledRules({ allowedCategories: ["groceries"], weeklyCapCents: "80" }));
   assert.throws(() => validateCompiledRules({ ...compilePolicyText(text, storeId), extra: "approve all" }));

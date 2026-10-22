@@ -33,7 +33,7 @@ Use TypeScript and the surrounding code’s two-space indentation, semicolons, a
 
 ## Testing Guidelines
 
-No test runner or coverage threshold is configured. Before submitting changes, run `pnpm run check-types` and the relevant build or development command. Add focused tests when introducing a test framework, with names that state the behavior under test.
+Focused Node tests use `tsx --test`. Run `pnpm --filter @mandate/api test` and `pnpm --filter server test`, then `pnpm run check-types`. Rule endpoint integration tests need a local MongoDB service: set `MANDATE_TEST_MONGODB_URI` and run `pnpm --filter server test:integration`. No coverage threshold is configured.
 
 ## Commit & Pull Request Guidelines
 

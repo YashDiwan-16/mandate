@@ -85,6 +85,8 @@ The server also requires `INTENT_SIGNING_KEY` (at least 32 characters). Keep thi
 
 The authenticated tRPC mutations `rules.preview` and `rules.confirm` accept policy text and an existing store ID. Preview returns validated rules; confirmation checks that preview again, creates a versioned policy, and signs an intent record. `rules.verifyIntent` checks the stored signature. The current MVP interpreter supports a constrained format such as “Groceries up to $80 a week. Ask me before anything over $30 from a new category. Never gift cards or subscriptions.” Unsupported wording is rejected for the shopper to revise. These endpoints do not authorize payments.
 
+Run compiler and signature tests with `pnpm --filter @mandate/api test` and `pnpm --filter server test`. For database-backed endpoint tests, start MongoDB and run `MANDATE_TEST_MONGODB_URI=mongodb://127.0.0.1:27017 pnpm --filter server test:integration`. The test suite creates and removes its own randomly named database.
+
 ## Project Structure
 
 ```
