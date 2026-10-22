@@ -103,6 +103,101 @@ New intents use a canonical version-2 JSON payload with `currency: "USD"` and a 
 
 Run compiler and signature tests with `pnpm --filter @mandate/api test` and `pnpm --filter server test`. For database-backed endpoint tests, start MongoDB and run `MANDATE_TEST_MONGODB_URI=mongodb://127.0.0.1:27017 pnpm --filter server test:integration`. The test suite creates and removes its own randomly named database.
 
+## FreshCart Demo Catalog
+
+The catalog is read-only. It contains one FreshCart demo store and 20 products with
+fixed MongoDB IDs. Prices are nonnegative, safe integer **USD cents** (`199` means
+$1.99). Product categories use the same names as policy rules: groceries, books,
+clothing, electronics, gift_card, and subscription. The fixture covers groceries,
+books, clothing, gift cards, and subscriptions. All 20 products start active.
+
+The seed uses insert-only upserts. Running it again, including concurrently,
+does not create duplicates or overwrite existing prices, descriptions, activity,
+store ownership, or PayPal configuration. A partial run can be retried to fill in
+missing records. Changes to the fixture do not update existing records: use a
+separate intentional database update with validation for price/availability changes.
+Use this seed with a development database; it creates no login credentials and
+requires an existing user to own the store.
+
+### Seed Locally
+
+Configure `apps/server/.env` as above, with a local `DATABASE_URL` such as
+`mongodb://127.0.0.1:27017/mandate`. Start MongoDB and the API:
+
+```bash
+pnpm run dev:server
+```
+
+In another terminal, register a local demo account and capture its session in a
+cookie jar outside the repository (requires `curl` and `jq`):
+
+```bash
+CATALOG_COOKIES="$(mktemp)"
+SIGNUP_RESPONSE=$(curl --fail-with-body -sS -c "$CATALOG_COOKIES" \
+  http://localhost:3000/api/auth/sign-up/email \
+  -H 'Content-Type: application/json' \
+  -H 'Origin: http://localhost:3001' \
+  --data '{"name":"FreshCart Demo","email":"freshcart@example.test","password":"local-demo-password-123"}')
+MERCHANT_USER_ID=$(printf '%s' "$SIGNUP_RESPONSE" | jq -er '.user.id')
+pnpm run seed:freshcart --merchant-user-id "$MERCHANT_USER_ID"
+```
+
+For a previously registered account, use `/api/auth/sign-in/email` with the same
+email and password to obtain a fresh cookie and user ID instead of signing up again.
+The command loads Varlock from the server directory and prints a JSON summary with
+`storeId`, `productCount: 20`, and `insertedProducts` (zero after a complete prior seed).
+The stable FreshCart store ID is `66fc00000000000000000001`; the first product,
+Bananas, has ID `66fc00000000000000000101` and starts at 199 cents.
+
+### Query Locally
+
+Use the same terminal so `$CATALOG_COOKIES` points to the authenticated cookie jar:
+
+```bash
+curl --fail-with-body -sS -b "$CATALOG_COOKIES" --get \
+  http://localhost:3000/trpc/catalog.listStores \
+  --data-urlencode 'input={}' | jq '.result.data'
+
+curl --fail-with-body -sS -b "$CATALOG_COOKIES" --get \
+  http://localhost:3000/trpc/catalog.getStore \
+  --data-urlencode 'input={"storeId":"66fc00000000000000000001"}' | jq '.result.data'
+
+curl --fail-with-body -sS -b "$CATALOG_COOKIES" --get \
+  http://localhost:3000/trpc/catalog.listProducts \
+  --data-urlencode 'input={"storeId":"66fc00000000000000000001","limit":20}' | jq '.result.data'
+
+curl --fail-with-body -sS -b "$CATALOG_COOKIES" --get \
+  http://localhost:3000/trpc/catalog.getProduct \
+  --data-urlencode 'input={"storeId":"66fc00000000000000000001","productId":"66fc00000000000000000101"}' | jq '.result.data'
+
+rm "$CATALOG_COOKIES"
+```
+
+All four queries require authentication. Lists return `{ items, nextCursor }`,
+sorted by ID, with a default limit of 50 and maximum 100. Pass `nextCursor` as
+`cursor` for the next page. Both product queries exclude inactive products;
+direct reads also verify the requested store. Malformed IDs return `BAD_REQUEST`;
+missing stores/products and inactive products return `NOT_FOUND`.
+
+Product responses contain `id`, `storeId`, `name`, `description`, `category`,
+`priceCents`, `currency`, and `updatedAt`. Prices are read from MongoDB on each
+request; there is no catalog price cache or price reservation. Store responses
+expose only `id`, `name`, and `slug`, not merchant account/payment details.
+
+**Descriptions are untrusted text**, even for seeded products. Consumers must
+display them as escaped text, never raw HTML/Markdown, instructions to a model,
+policy overrides, or payment parameters. The catalog does not execute or pass
+descriptions to a model. Future purchasing must re-read trusted structured product
+fields, including current price and activity, and independently authorize payment.
+The demo PayPal merchant value is deliberately a non-payable placeholder. This
+feature does not add purchasing, charging, or subscriptions.
+
+Run the catalog tests against an isolated database on your local MongoDB service:
+
+```bash
+MANDATE_TEST_MONGODB_URI=mongodb://127.0.0.1:27017 pnpm --filter server test:integration
+```
+
 ## Project Structure
 
 ```
