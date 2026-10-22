@@ -12,9 +12,9 @@ const policyInput = z.strictObject({
   storeId: objectId,
 });
 
-function parsePolicy(originalWords: string, storeId: string) {
+function parsePolicy(originalWords: string, storeId: string, payeeId: string) {
   try {
-    return compilePolicyText(originalWords, storeId);
+    return compilePolicyText(originalWords, storeId, payeeId);
   } catch (error) {
     throw new TRPCError({
       code: "BAD_REQUEST",
@@ -28,6 +28,8 @@ function policyRules(policy: Pick<PolicyRecord, "rules">) {
     allowedCategories: policy.rules.allowedCategories,
     blockedCategories: policy.rules.blockedCategories,
     allowedStoreId: String(policy.rules.allowedStoreId),
+    allowedPayeeId: policy.rules.allowedPayeeId,
+    recipientMustBe: policy.rules.recipientMustBe,
     weeklyCapCents: policy.rules.weeklyCapCents,
     askAboveCents: policy.rules.askAboveCents,
     askForNewCategory: policy.rules.askForNewCategory,
@@ -68,15 +70,15 @@ async function requireStore(storeId: string) {
 
 export const rulesRouter = router({
   preview: protectedProcedure.input(policyInput).mutation(async ({ input }) => {
-    await requireStore(input.storeId);
-    return parsePolicy(input.originalWords, input.storeId);
+    const store = await requireStore(input.storeId);
+    return parsePolicy(input.originalWords, input.storeId, store.paypalMerchantId);
   }),
 
   confirm: protectedProcedure
     .input(policyInput.extend({ preview: compiledRulesSchema }))
     .mutation(async ({ ctx, input }) => {
-      await requireStore(input.storeId);
-      const rules = parsePolicy(input.originalWords, input.storeId);
+      const store = await requireStore(input.storeId);
+      const rules = parsePolicy(input.originalWords, input.storeId, store.paypalMerchantId);
       if (JSON.stringify(rules) !== JSON.stringify(input.preview)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Preview changed; preview the policy again" });
       }

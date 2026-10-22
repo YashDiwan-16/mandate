@@ -3,6 +3,10 @@ import mongoose, { type InferSchemaType } from "mongoose";
 const { Schema, model } = mongoose;
 const { ObjectId } = Schema.Types;
 const nonnegativeCents = { type: Number, required: true, min: 0, validate: Number.isSafeInteger };
+const validCategories = (categories: string[]) =>
+  categories.length > 0 &&
+  categories.every((category) => /^[a-z][a-z_]*$/.test(category)) &&
+  new Set(categories).size === categories.length;
 
 export const purchaseRequestStatuses = [
   "requested",
@@ -41,21 +45,31 @@ export type DisputeStatus = (typeof disputeStatuses)[number];
 
 const policyRulesSchema = new Schema(
   {
-    allowedCategories: { type: [String], required: true },
-    blockedCategories: { type: [String], required: true },
+    allowedCategories: { type: [String], required: true, validate: validCategories },
+    blockedCategories: { type: [String], required: true, validate: validCategories },
     allowedStoreId: { type: ObjectId, ref: "Store", required: true },
-    weeklyCapCents: nonnegativeCents,
+    allowedPayeeId: { type: String, required: true, trim: true },
+    recipientMustBe: { type: String, required: true, enum: ["store"] },
+    weeklyCapCents: { type: Number, required: true, min: 1, validate: Number.isSafeInteger },
     askAboveCents: nonnegativeCents,
     askForNewCategory: { type: Boolean, required: true },
   },
   { _id: false },
 );
+policyRulesSchema.pre("validate", function () {
+  if (this.askAboveCents > this.weeklyCapCents) {
+    this.invalidate("askAboveCents", "Approval threshold exceeds weekly cap");
+  }
+  if (this.allowedCategories.some((category) => this.blockedCategories.includes(category))) {
+    this.invalidate("blockedCategories", "A category cannot be both allowed and blocked");
+  }
+});
 export type PolicyRules = InferSchemaType<typeof policyRulesSchema>;
 
 const policySchema = new Schema(
   {
     userId: { type: ObjectId, ref: "User", required: true },
-    version: { type: Number, required: true, min: 1 },
+    version: { type: Number, required: true, min: 1, validate: Number.isSafeInteger },
     originalWords: { type: String, required: true },
     rules: { type: policyRulesSchema, required: true },
     confirmedAt: { type: Date, required: true },
@@ -95,7 +109,7 @@ const storeSchema = new Schema(
     merchantUserId: { type: ObjectId, ref: "User", required: true },
     name: { type: String, required: true },
     slug: { type: String, required: true, unique: true },
-    paypalMerchantId: { type: String, required: true },
+    paypalMerchantId: { type: String, required: true, trim: true },
   },
   { collection: "stores", timestamps: true },
 );

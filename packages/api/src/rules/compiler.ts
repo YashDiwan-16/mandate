@@ -3,9 +3,11 @@ import { z } from "zod";
 const category = z.string().min(1).regex(/^[a-z][a-z_]*$/);
 export const compiledRulesSchema = z
   .strictObject({
-    allowedCategories: z.array(category).min(1),
-    blockedCategories: z.array(category).min(1),
+    allowedCategories: z.array(category).min(1).refine((items) => new Set(items).size === items.length),
+    blockedCategories: z.array(category).min(1).refine((items) => new Set(items).size === items.length),
     allowedStoreId: z.string().regex(/^[a-f\d]{24}$/i),
+    allowedPayeeId: z.string().trim().min(1),
+    recipientMustBe: z.literal("store"),
     weeklyCapCents: z.number().int().positive().safe(),
     askAboveCents: z.number().int().nonnegative().safe(),
     askForNewCategory: z.boolean(),
@@ -50,7 +52,7 @@ function categoriesIn(text: string): string[] {
 }
 
 /** Interpret the supported demo grammar; incomplete or unfamiliar clauses fail closed. */
-export function compilePolicyText(originalWords: string, allowedStoreId: string): CompiledRules {
+export function compilePolicyText(originalWords: string, allowedStoreId: string, allowedPayeeId: string): CompiledRules {
   const clauses = originalWords
     .split(/\.(?!\d)|[!?]+/)
     .map((clause) => clause.trim())
@@ -73,6 +75,8 @@ export function compilePolicyText(originalWords: string, allowedStoreId: string)
     allowedCategories,
     blockedCategories,
     allowedStoreId,
+    allowedPayeeId,
+    recipientMustBe: "store",
     weeklyCapCents: dollarsToCents(weeklyAmount[2]),
     askAboveCents: dollarsToCents(approvalAmount[1]),
     askForNewCategory: true,

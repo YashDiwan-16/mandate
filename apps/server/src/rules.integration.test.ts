@@ -50,11 +50,46 @@ describe("rule endpoints against an isolated MongoDB database", { skip: !testUri
     const api = caller(newUserId());
     const preview = await api.rules.preview({ originalWords: sample, storeId });
     assert.equal(preview.weeklyCapCents, 8000);
+    assert.equal(preview.allowedPayeeId, "sandbox-merchant");
+    assert.equal(preview.recipientMustBe, "store");
     await assert.rejects(api.rules.preview({ originalWords: sample, storeId: newUserId() }), /Store not found/);
     await assert.rejects(
       api.rules.confirm({ originalWords: sample, storeId, preview: { ...preview, weeklyCapCents: 9000 } }),
       /Preview changed/,
     );
+    await assert.rejects(
+      api.rules.confirm({ originalWords: sample, storeId, preview: { ...preview, allowedPayeeId: "attacker" } }),
+      /Preview changed/,
+    );
+  });
+
+  test("confirmation rejects a store payee changed after preview", async () => {
+    const store = await Store.create({
+      merchantUserId: newUserId(),
+      name: "Other FreshCart",
+      slug: `freshcart-${newUserId()}`,
+      paypalMerchantId: "original-payee",
+    });
+    const api = caller(newUserId());
+    const preview = await api.rules.preview({ originalWords: sample, storeId: store.id });
+    await Store.updateOne({ _id: store._id }, { $set: { paypalMerchantId: "changed-payee" } });
+    await assert.rejects(
+      api.rules.confirm({ originalWords: sample, storeId: store.id, preview }),
+      /Preview changed/,
+    );
+  });
+
+  test("policy model rejects invalid direct writes", async () => {
+    const rules = await caller(newUserId()).rules.preview({ originalWords: sample, storeId });
+    const base = { userId: newUserId(), version: 1, originalWords: sample, confirmedAt: new Date() };
+    await assert.rejects(new Policy({ ...base, rules: { ...rules, allowedPayeeId: undefined } }).validate());
+    await assert.rejects(new Policy({ ...base, rules: { ...rules, allowedPayeeId: "   " } }).validate());
+    await assert.rejects(new Policy({ ...base, rules: { ...rules, recipientMustBe: "anyone" } }).validate());
+    await assert.rejects(new Policy({ ...base, rules: { ...rules, allowedCategories: [] } }).validate());
+    await assert.rejects(new Policy({ ...base, rules: { ...rules, allowedCategories: ["groceries", "groceries"] } }).validate());
+    await assert.rejects(new Policy({ ...base, rules: { ...rules, blockedCategories: ["groceries"] } }).validate());
+    await assert.rejects(new Policy({ ...base, rules: { ...rules, askAboveCents: 9000 } }).validate());
+    await assert.rejects(new Policy({ ...base, version: 1.5, rules }).validate());
   });
 
   test("repeated confirmation returns one policy and a verifiable intent", async () => {
@@ -68,6 +103,8 @@ describe("rule endpoints against an isolated MongoDB database", { skip: !testUri
     assert.equal(second.version, 1);
     assert.equal(await Policy.countDocuments({ userId }), 1);
     assert.deepEqual(await api.rules.verifyIntent({ intentId: first.intentId }), { valid: true });
+    const storedIntent = await SignedIntent.findById(first.intentId).lean();
+    assert.equal(JSON.parse(storedIntent!.payload).rules.allowedPayeeId, "sandbox-merchant");
     await Policy.updateOne({ _id: first.policyId }, { $set: { originalWords: "altered" } });
     assert.deepEqual(await api.rules.verifyIntent({ intentId: first.intentId }), { valid: false });
   });

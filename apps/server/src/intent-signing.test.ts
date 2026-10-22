@@ -10,6 +10,7 @@ test("signatures verify an exact intent and reject tampering", () => {
   const rules = compilePolicyText(
     "Groceries up to $80 a week. Ask me before anything over $30 from a new category. Never gift cards or subscriptions.",
     "507f1f77bcf86cd799439011",
+    "freshcart-sandbox-merchant",
   );
   const payload = serializeIntent({
     userId: "507f1f77bcf86cd799439012",
