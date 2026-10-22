@@ -6,7 +6,7 @@ import { auth } from "./services";
 import { ENV } from "./env.server";
 import { createIntentSigner } from "./intent-signing";
 
-const intentSigner = createIntentSigner(ENV.INTENT_SIGNING_KEY);
+const intentSigner = createIntentSigner(ENV.INTENT_ED25519_PRIVATE_KEY, ENV.INTENT_SIGNING_KEY);
 
 export type CreateContextOptions = {
   context: HonoContext;

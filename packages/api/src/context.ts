@@ -6,7 +6,15 @@ export type Context = {
   db: Database;
   intentSigner: {
     keyId: string;
+    verificationKey: {
+      kty: "OKP";
+      crv: "Ed25519";
+      x: string;
+      kid: string;
+      alg: "EdDSA";
+      use: "sig";
+    };
     sign(payload: string): string;
-    verify(payload: string, signature: string): boolean;
+    verify(payload: string, signature: string, keyId: string): boolean;
   };
 };

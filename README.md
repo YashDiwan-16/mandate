@@ -79,11 +79,27 @@ Bun's automatic env loading is disabled in `bunfig.toml`; the framework integrat
 
 Run standalone Node/Bun tools that use Varlock from the owning app directory so they load that app's schema and env files. `env:generate` only generates TypeScript files; it does not initialize environment values in a subsequent command.
 
-The server also requires `INTENT_SIGNING_KEY` (at least 32 characters). Keep this key stable: confirmed policy signatures cannot be verified after changing it.
+The server requires `INTENT_ED25519_PRIVATE_KEY`, a base64-encoded PKCS#8 DER Ed25519 private key. Generate one locally, then put the output in the ignored `apps/server/.env` (never commit it):
+
+```bash
+node -e 'const {generateKeyPairSync}=require("node:crypto"); console.log(generateKeyPairSync("ed25519").privateKey.export({format:"der",type:"pkcs8"}).toString("base64"))'
+```
+
+Keep the existing `INTENT_SIGNING_KEY` (at least 32 characters) unchanged for read-only verification of older HMAC-signed intents. New intents use only Ed25519. Keep both keys stable for this MVP; key rotation is not supported.
 
 ## Policy Compiler
 
-The authenticated tRPC mutations `rules.preview` and `rules.confirm` accept policy text and an existing store ID. Preview returns validated rules, including the store's PayPal merchant ID and an explicit `recipientMustBe: "store"` constraint; confirmation checks that preview again, creates a versioned policy, and signs an intent record. `rules.verifyIntent` checks the stored signature. The current MVP interpreter supports a constrained format such as “Groceries up to $80 a week. Ask me before anything over $30 from a new category. Never gift cards or subscriptions.” Supported category names are groceries, books, clothing, electronics, gift cards, and subscriptions. Unsupported wording is rejected for the shopper to revise. These endpoints do not authorize payments.
+The authenticated tRPC mutations `rules.preview` and `rules.confirm` accept policy text and an existing store ID. Preview returns validated rules, including the store's PayPal merchant ID and `recipientMustBe: "store"`; confirmation recomputes the preview, creates a versioned policy, and returns the signed `payload`, `keyId`, and `signature`. `rules.verifyIntent` checks a shopper's stored intent. The public `rules.verificationKeys` query returns the current Ed25519 JWK so a merchant can verify a new intent independently. These endpoints do not authorize payments.
+
+The interpreter requires exactly three period-separated clauses, in any order (case-insensitive):
+
+1. `<categories> up to $N a week` — also accepts `maximum` or `limit`/`limit of` instead of `up to`, and `per week` instead of `a week`.
+2. `Ask me before anything over $N from a new category`.
+3. `Never <categories>`.
+
+`N` is a positive dollar amount with zero to two decimal places for the weekly cap and a nonnegative amount for the approval threshold. Category lists use commas, `and`, or `or`; supported names are grocery/groceries, books, clothing, electronics, gift card(s), and subscription(s). For example: “Groceries up to $80 a week. Ask me before anything over $30 from a new category. Never gift cards or subscriptions.” `Under $80`, extra clauses, unknown categories, and text over 2,000 characters are rejected rather than guessed.
+
+New intents use a canonical version-2 JSON payload with `currency: "USD"` and a detached Ed25519 signature (base64url). Merchants verify the exact UTF-8 payload bytes using the JWK identified by `keyId`; this is not a JWS or full AP2 wire format. Existing `v1` HMAC records remain Mandate-verifiable only. Re-confirm the same policy to issue a new public-key-verifiable version.
 
 Run compiler and signature tests with `pnpm --filter @mandate/api test` and `pnpm --filter server test`. For database-backed endpoint tests, start MongoDB and run `MANDATE_TEST_MONGODB_URI=mongodb://127.0.0.1:27017 pnpm --filter server test:integration`. The test suite creates and removes its own randomly named database.
 

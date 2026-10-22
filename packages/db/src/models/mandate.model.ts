@@ -3,9 +3,11 @@ import mongoose, { type InferSchemaType } from "mongoose";
 const { Schema, model } = mongoose;
 const { ObjectId } = Schema.Types;
 const nonnegativeCents = { type: Number, required: true, min: 0, validate: Number.isSafeInteger };
+export const policyCategories = ["groceries", "books", "clothing", "electronics", "gift_card", "subscription"] as const;
+const policyCategorySet = new Set<string>(policyCategories);
 const validCategories = (categories: string[]) =>
   categories.length > 0 &&
-  categories.every((category) => /^[a-z][a-z_]*$/.test(category)) &&
+  categories.every((category) => policyCategorySet.has(category)) &&
   new Set(categories).size === categories.length;
 
 export const purchaseRequestStatuses = [
@@ -70,7 +72,7 @@ const policySchema = new Schema(
   {
     userId: { type: ObjectId, ref: "User", required: true },
     version: { type: Number, required: true, min: 1, validate: Number.isSafeInteger },
-    originalWords: { type: String, required: true },
+    originalWords: { type: String, required: true, trim: true, maxlength: 2000 },
     rules: { type: policyRulesSchema, required: true },
     confirmedAt: { type: Date, required: true },
   },

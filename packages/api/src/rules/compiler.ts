@@ -1,11 +1,12 @@
 import { z } from "zod";
+import { policyCategories } from "@mandate/db";
 
-const category = z.string().min(1).regex(/^[a-z][a-z_]*$/);
+const category = z.enum(policyCategories);
 export const compiledRulesSchema = z
   .strictObject({
     allowedCategories: z.array(category).min(1).refine((items) => new Set(items).size === items.length),
     blockedCategories: z.array(category).min(1).refine((items) => new Set(items).size === items.length),
-    allowedStoreId: z.string().regex(/^[a-f\d]{24}$/i),
+    allowedStoreId: z.string().regex(/^[a-f\d]{24}$/i).transform((id) => id.toLowerCase()),
     allowedPayeeId: z.string().trim().min(1),
     recipientMustBe: z.literal("store"),
     weeklyCapCents: z.number().int().positive().safe(),
@@ -53,17 +54,17 @@ function categoriesIn(text: string): string[] {
 
 /** Interpret the supported demo grammar; incomplete or unfamiliar clauses fail closed. */
 export function compilePolicyText(originalWords: string, allowedStoreId: string, allowedPayeeId: string): CompiledRules {
-  const clauses = originalWords
+  const clauses = z.string().trim().min(1).max(2000).parse(originalWords)
     .split(/\.(?!\d)|[!?]+/)
     .map((clause) => clause.trim())
     .filter(Boolean);
   const weekly = clauses.find((clause) => /\b(?:a|per) week\b/i.test(clause));
   const approval = clauses.find((clause) => /\bask me\b/i.test(clause));
   const blocked = clauses.find((clause) => /\bnever\b/i.test(clause));
-  if (!weekly || !approval || !blocked || clauses.some((c) => ![weekly, approval, blocked].includes(c))) {
+  if (clauses.length !== 3 || !weekly || !approval || !blocked || clauses.some((c) => ![weekly, approval, blocked].includes(c))) {
     throw new Error("Policy needs a weekly cap, approval rule, and blocked categories");
   }
-  const weeklyAmount = weekly.match(/^([a-z ,]+?)\s+(?:up to|under|maximum|limit(?: of)?)\s*\$(\d+(?:\.\d{1,2})?)\s*(?:a|per) week$/i);
+  const weeklyAmount = weekly.match(/^([a-z ,]+?)\s+(?:up to|maximum|limit(?: of)?)\s*\$(\d+(?:\.\d{1,2})?)\s*(?:a|per) week$/i);
   const approvalAmount = approval.match(/^Ask me before anything over\s*\$(\d+(?:\.\d{1,2})?)\s+from a new category$/i);
   const blockedMatch = blocked.match(/^Never\s+([a-z ,]+)$/i);
   if (!weeklyAmount?.[1] || !weeklyAmount[2] || !approvalAmount?.[1] || !blockedMatch?.[1]) {
